@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
   <title>WORD BATTLE</title>
 
   <style>
@@ -12,19 +13,27 @@
       color: white;
       text-align: center;
       margin: 0;
-      padding: 30px;
+      padding: 24px;
     }
 
     h1 {
-      margin-bottom: 10px;
+      margin-bottom: 8px;
+      letter-spacing: 2px;
     }
 
     .container {
-      max-width: 600px;
+      max-width: 900px;
       margin: 0 auto;
       background: #1f2937;
       padding: 24px;
+      border-radius: 14px;
+    }
+
+    .panel {
+      background: #111827;
+      padding: 16px;
       border-radius: 12px;
+      margin-top: 16px;
     }
 
     input {
@@ -34,6 +43,7 @@
       border: none;
       margin: 6px;
       text-align: center;
+      max-width: 180px;
     }
 
     button {
@@ -47,6 +57,10 @@
       color: white;
     }
 
+    button:hover {
+      opacity: 0.9;
+    }
+
     button:disabled {
       background: #6b7280;
       cursor: not-allowed;
@@ -56,10 +70,26 @@
       margin: 16px 0;
       min-height: 24px;
       color: #facc15;
+      font-weight: bold;
     }
 
-    .board {
+    .boards {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
       margin-top: 20px;
+    }
+
+    .boardBox {
+      background: #0f172a;
+      padding: 14px;
+      border-radius: 12px;
+    }
+
+    .boardTitle {
+      font-weight: bold;
+      margin-bottom: 10px;
+      color: #d1d5db;
     }
 
     .row {
@@ -93,9 +123,64 @@
       background: #4b5563;
     }
 
+    .empty {
+      background: #1f2937;
+      border: 1px solid #374151;
+    }
+
     .info {
-      margin-top: 16px;
+      margin-top: 12px;
       color: #d1d5db;
+      line-height: 1.8;
+    }
+
+    .meaning {
+      text-align: left;
+      background: #0f172a;
+      padding: 16px;
+      border-radius: 12px;
+      margin-top: 18px;
+      display: none;
+    }
+
+    .meaning h2 {
+      margin-top: 0;
+      text-align: center;
+    }
+
+    .meaningItem {
+      margin-top: 12px;
+      border-top: 1px solid #374151;
+      padding-top: 12px;
+    }
+
+    .small {
+      font-size: 14px;
+      color: #9ca3af;
+    }
+
+    @media (max-width: 700px) {
+      body {
+        padding: 12px;
+      }
+
+      .container {
+        padding: 16px;
+      }
+
+      .boards {
+        grid-template-columns: 1fr;
+      }
+
+      .cell {
+        width: 42px;
+        height: 42px;
+        font-size: 20px;
+      }
+
+      input {
+        max-width: 150px;
+      }
     }
   </style>
 </head>
@@ -103,65 +188,106 @@
 <body>
   <div class="container">
     <h1>WORD BATTLE</h1>
-    <p>5文字の英単語を当てる対戦ゲーム</p>
+    <p>5文字英単語を当てるオンライン対戦ゲーム</p>
 
-    <div>
-      <button id="createRoomButton">部屋を作る</button>
+    <div class="panel">
+      <div>
+        <input id="nameInput" placeholder="名前" maxlength="12" />
+      </div>
+
+      <div>
+        <button id="createRoomButton">部屋を作る</button>
+      </div>
+
+      <div>
+        <input id="roomInput" placeholder="部屋ID" maxlength="4" />
+        <button id="joinRoomButton">部屋に入る</button>
+      </div>
     </div>
 
-    <div>
-      <input id="roomInput" placeholder="部屋ID" maxlength="4" />
-      <button id="joinRoomButton">部屋に入る</button>
-    </div>
-
-    <hr />
-
-    <div>
+    <div class="panel">
       <input id="guessInput" placeholder="5文字の単語" maxlength="5" disabled />
       <button id="guessButton" disabled>送信</button>
+      <button id="rematchButton" style="display:none;">もう一度遊ぶ</button>
     </div>
 
-    <div id="message">部屋を作るか、部屋IDを入力してください。</div>
+    <div id="message">名前を入力して、部屋を作るか部屋IDを入力してください。</div>
 
     <div class="info">
       <div>現在の部屋ID：<span id="roomDisplay">なし</span></div>
-      <div>相手の入力回数：<span id="opponentCount">0</span></div>
+      <button id="copyRoomButton" disabled>部屋IDをコピー</button>
+      <div>あなた：<span id="myNameDisplay">未設定</span></div>
+      <div>相手：<span id="opponentNameDisplay">待機中</span></div>
     </div>
 
-    <div id="board" class="board"></div>
+    <div class="boards">
+      <div class="boardBox">
+        <div class="boardTitle">あなたの盤面</div>
+        <div id="myBoard"></div>
+      </div>
+
+      <div class="boardBox">
+        <div class="boardTitle">相手の盤面</div>
+        <div id="opponentBoard"></div>
+        <div class="small">相手の文字は見えません。色だけ表示されます。</div>
+      </div>
+    </div>
+
+    <div id="meaningBox" class="meaning">
+      <h2>単語の意味</h2>
+      <div id="meaningContent"></div>
+    </div>
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
+
   <script>
     const socket = io();
 
     let currentRoomId = null;
     let gameStarted = false;
 
+    const nameInput = document.getElementById("nameInput");
     const createRoomButton = document.getElementById("createRoomButton");
     const joinRoomButton = document.getElementById("joinRoomButton");
     const roomInput = document.getElementById("roomInput");
     const guessInput = document.getElementById("guessInput");
     const guessButton = document.getElementById("guessButton");
+    const rematchButton = document.getElementById("rematchButton");
     const message = document.getElementById("message");
     const roomDisplay = document.getElementById("roomDisplay");
-    const opponentCount = document.getElementById("opponentCount");
-    const board = document.getElementById("board");
+    const copyRoomButton = document.getElementById("copyRoomButton");
+    const myNameDisplay = document.getElementById("myNameDisplay");
+    const opponentNameDisplay = document.getElementById("opponentNameDisplay");
+    const myBoard = document.getElementById("myBoard");
+    const opponentBoard = document.getElementById("opponentBoard");
+    const meaningBox = document.getElementById("meaningBox");
+    const meaningContent = document.getElementById("meaningContent");
+
+    createEmptyRows(myBoard);
+    createEmptyRows(opponentBoard);
 
     createRoomButton.addEventListener("click", () => {
-      socket.emit("createRoom");
+      message.textContent = "部屋を作成中です。";
+
+      socket.emit("createRoom", {
+        playerName: getPlayerName()
+      });
     });
 
     joinRoomButton.addEventListener("click", () => {
-      const roomId = roomInput.value.trim();
+      const roomId = roomInput.value.trim().toUpperCase();
 
       if (roomId.length !== 4) {
         message.textContent = "4文字の部屋IDを入力してください。";
         return;
       }
 
+      message.textContent = "部屋に参加中です。";
+
       socket.emit("joinRoom", {
-        roomId
+        roomId,
+        playerName: getPlayerName()
       });
     });
 
@@ -172,6 +298,59 @@
         submitGuess();
       }
     });
+
+    guessInput.addEventListener("input", () => {
+      guessInput.value = guessInput.value.toUpperCase();
+    });
+
+    roomInput.addEventListener("input", () => {
+      roomInput.value = roomInput.value.toUpperCase();
+    });
+
+    copyRoomButton.addEventListener("click", async () => {
+      if (!currentRoomId) {
+        return;
+      }
+
+      try {
+        await navigator.clipboard.writeText(currentRoomId);
+        message.textContent = "部屋IDをコピーしました。";
+      } catch {
+        message.textContent = `コピーできない場合は、部屋ID「${currentRoomId}」を直接伝えてください。`;
+      }
+    });
+
+    rematchButton.addEventListener("click", () => {
+      if (!currentRoomId) {
+        return;
+      }
+
+      socket.emit("requestRematch", {
+        roomId: currentRoomId
+      });
+
+      rematchButton.disabled = true;
+      message.textContent = "再戦希望を送りました。相手を待っています。";
+    });
+
+    function getPlayerName() {
+      const name = nameInput.value.trim();
+      return name.length > 0 ? name : "Player";
+    }
+
+    function lockRoomControls() {
+      nameInput.disabled = true;
+      createRoomButton.disabled = true;
+      joinRoomButton.disabled = true;
+      roomInput.disabled = true;
+    }
+
+    function unlockRoomControls() {
+      nameInput.disabled = false;
+      createRoomButton.disabled = false;
+      joinRoomButton.disabled = false;
+      roomInput.disabled = false;
+    }
 
     function submitGuess() {
       if (!gameStarted) {
@@ -190,66 +369,201 @@
         roomId: currentRoomId,
         guess
       });
-
-      guessInput.value = "";
     }
 
-    function addGuessRow(guess, result) {
-      const row = document.createElement("div");
-      row.className = "row";
+    function createEmptyRows(board) {
+      board.innerHTML = "";
 
-      for (let i = 0; i < guess.length; i++) {
-        const cell = document.createElement("div");
-        cell.className = `cell ${result[i]}`;
-        cell.textContent = guess[i];
-        row.appendChild(cell);
+      for (let r = 0; r < 6; r++) {
+        const row = document.createElement("div");
+        row.className = "row";
+
+        for (let c = 0; c < 5; c++) {
+          const cell = document.createElement("div");
+          cell.className = "cell empty";
+          row.appendChild(cell);
+        }
+
+        board.appendChild(row);
+      }
+    }
+
+    function setGuessRow(board, rowIndex, guess, result, showLetters) {
+      const row = board.children[rowIndex];
+
+      if (!row) {
+        return;
       }
 
-      board.appendChild(row);
+      for (let i = 0; i < 5; i++) {
+        const cell = row.children[i];
+        cell.className = `cell ${result[i]}`;
+        cell.textContent = showLetters ? guess[i] : "";
+      }
     }
 
-    socket.on("roomCreated", ({ roomId }) => {
+    function resetScreenForGame() {
+      createEmptyRows(myBoard);
+      createEmptyRows(opponentBoard);
+
+      meaningBox.style.display = "none";
+      meaningContent.innerHTML = "";
+
+      guessInput.value = "";
+      guessInput.disabled = false;
+      guessButton.disabled = false;
+
+      rematchButton.style.display = "none";
+      rematchButton.disabled = false;
+
+      gameStarted = true;
+      lockRoomControls();
+
+      setTimeout(() => {
+        guessInput.focus();
+      }, 100);
+    }
+
+    function updatePlayerNames(players) {
+      const me = players.find((player) => player.id === socket.id);
+      const opponent = players.find((player) => player.id !== socket.id);
+
+      myNameDisplay.textContent = me ? me.name : "あなた";
+      opponentNameDisplay.textContent = opponent ? opponent.name : "待機中";
+    }
+
+    function showMeaning(answer, definition) {
+      meaningBox.style.display = "block";
+
+      if (!definition || !definition.meanings || definition.meanings.length === 0) {
+        meaningContent.innerHTML = `
+          <p><strong>${answer}</strong></p>
+          <p>意味を取得できませんでした。</p>
+        `;
+        return;
+      }
+
+      let html = `
+        <p>
+          <strong>${definition.word.toUpperCase()}</strong>
+          ${definition.phonetic ? ` <span class="small">${definition.phonetic}</span>` : ""}
+        </p>
+      `;
+
+      definition.meanings.forEach((item, index) => {
+        html += `
+          <div class="meaningItem">
+            <div><strong>${index + 1}. ${item.partOfSpeech}</strong></div>
+            <div>${item.definition}</div>
+            ${item.example ? `<div class="small">例: ${item.example}</div>` : ""}
+          </div>
+        `;
+      });
+
+      meaningContent.innerHTML = html;
+    }
+
+    socket.on("roomCreated", ({ roomId, playerName, players }) => {
       currentRoomId = roomId;
+
       roomDisplay.textContent = roomId;
+      roomInput.value = roomId;
+      myNameDisplay.textContent = playerName;
+      opponentNameDisplay.textContent = "待機中";
+
+      copyRoomButton.disabled = false;
+      lockRoomControls();
+
+      if (players) {
+        updatePlayerNames(players);
+      }
+
       message.textContent = `部屋を作りました。相手に部屋ID「${roomId}」を教えてください。`;
     });
 
-    socket.on("gameStart", ({ roomId, message: startMessage }) => {
+    socket.on("gameStart", ({ roomId, players, message: startMessage }) => {
       currentRoomId = roomId;
-      gameStarted = true;
 
       roomDisplay.textContent = roomId;
-      message.textContent = startMessage;
+      roomInput.value = roomId;
+      copyRoomButton.disabled = false;
 
-      guessInput.disabled = false;
-      guessButton.disabled = false;
-      guessInput.focus();
+      updatePlayerNames(players);
+      resetScreenForGame();
+
+      message.textContent = startMessage;
     });
 
-    socket.on("guessResult", ({ guess, result }) => {
-      addGuessRow(guess, result);
+    socket.on("guessResult", ({ guess, result, guessCount }) => {
+      setGuessRow(myBoard, guessCount - 1, guess, result, true);
+      guessInput.value = "";
       message.textContent = "判定しました。";
     });
 
-    socket.on("opponentProgress", ({ guessCount }) => {
-      opponentCount.textContent = guessCount;
+    socket.on("opponentGuess", ({ result, guessCount, playerName }) => {
+      setGuessRow(opponentBoard, guessCount - 1, "?????", result, false);
+      message.textContent = `${playerName} が ${guessCount} 回目を入力しました。`;
     });
 
-    socket.on("gameOver", ({ winner, answer }) => {
+    socket.on("playerFinished", ({ message: finishMessage }) => {
+      guessInput.disabled = true;
+      guessButton.disabled = true;
+      message.textContent = finishMessage;
+    });
+
+    socket.on("opponentFinished", ({ playerName }) => {
+      message.textContent = `${playerName} は6回使い切りました。`;
+    });
+
+    socket.on("gameOver", ({ winnerId, answer, definition }) => {
       gameStarted = false;
 
       guessInput.disabled = true;
       guessButton.disabled = true;
 
-      if (winner === socket.id) {
+      rematchButton.style.display = "inline-block";
+      rematchButton.disabled = false;
+
+      if (winnerId === null) {
+        message.textContent = `引き分けです。答えは ${answer} でした。`;
+      } else if (winnerId === socket.id) {
         message.textContent = `あなたの勝ちです！答えは ${answer} でした。`;
       } else {
         message.textContent = `相手の勝ちです。答えは ${answer} でした。`;
       }
+
+      showMeaning(answer, definition);
+    });
+
+    socket.on("rematchStatus", ({ count }) => {
+      message.textContent = `再戦希望：${count}/2`;
+    });
+
+    socket.on("rematchStarted", ({ roomId, players, message: startMessage }) => {
+      currentRoomId = roomId;
+
+      roomDisplay.textContent = roomId;
+      roomInput.value = roomId;
+
+      updatePlayerNames(players);
+      resetScreenForGame();
+
+      message.textContent = startMessage;
     });
 
     socket.on("errorMessage", (text) => {
       message.textContent = text;
+
+      if (!gameStarted && !currentRoomId) {
+        unlockRoomControls();
+      }
+    });
+
+    socket.on("disconnect", () => {
+      gameStarted = false;
+      guessInput.disabled = true;
+      guessButton.disabled = true;
+      message.textContent = "サーバーとの接続が切れました。ページを更新してください。";
     });
   </script>
 </body>
