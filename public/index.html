@@ -21,6 +21,10 @@
       letter-spacing: 2px;
     }
 
+    a {
+      color: #93c5fd;
+    }
+
     .container {
       max-width: 900px;
       margin: 0 auto;
@@ -435,10 +439,31 @@
     function showMeaning(answer, definition) {
       meaningBox.style.display = "block";
 
+      const links = definition?.searchLinks || [
+        {
+          name: "Wiktionary",
+          url: `https://en.wiktionary.org/wiki/${encodeURIComponent(answer.toLowerCase())}`
+        },
+        {
+          name: "Cambridge Dictionary",
+          url: `https://dictionary.cambridge.org/dictionary/english/${encodeURIComponent(answer.toLowerCase())}`
+        },
+        {
+          name: "Google Search",
+          url: `https://www.google.com/search?q=${encodeURIComponent(answer.toLowerCase() + " meaning")}`
+        }
+      ];
+
+      const linkHtml = links
+        .map((link) => `<a href="${link.url}" target="_blank" rel="noopener noreferrer">${link.name}</a>`)
+        .join(" / ");
+
       if (!definition || !definition.meanings || definition.meanings.length === 0) {
         meaningContent.innerHTML = `
           <p><strong>${answer}</strong></p>
-          <p>意味を取得できませんでした。</p>
+          <p>自動取得では意味を見つけられませんでした。</p>
+          <p>以下のサイトで検索できます。</p>
+          <p>${linkHtml}</p>
         `;
         return;
       }
@@ -450,6 +475,18 @@
         </p>
       `;
 
+      if (definition.sourceName) {
+        html += `
+          <p class="small">
+            出典: ${
+              definition.sourceUrl
+                ? `<a href="${definition.sourceUrl}" target="_blank" rel="noopener noreferrer">${definition.sourceName}</a>`
+                : definition.sourceName
+            }
+          </p>
+        `;
+      }
+
       definition.meanings.forEach((item, index) => {
         html += `
           <div class="meaningItem">
@@ -459,6 +496,13 @@
           </div>
         `;
       });
+
+      html += `
+        <div class="meaningItem">
+          <div class="small">他の辞書で確認する</div>
+          <p>${linkHtml}</p>
+        </div>
+      `;
 
       meaningContent.innerHTML = html;
     }
@@ -549,6 +593,15 @@
       resetScreenForGame();
 
       message.textContent = startMessage;
+    });
+
+    socket.on("opponentLeft", ({ message: leftMessage }) => {
+      gameStarted = false;
+
+      guessInput.disabled = true;
+      guessButton.disabled = true;
+
+      message.textContent = leftMessage || "相手が退出しました。ページを更新してください。";
     });
 
     socket.on("errorMessage", (text) => {

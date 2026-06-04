@@ -89,60 +89,208 @@ function judgeGuess(answer, guess) {
   return result;
 }
 
-async function getWordMeaning(word) {
-  if (definitionCache.has(word)) {
-    return definitionCache.get(word);
+function buildSearchLinks(word) {
+  const lower = word.toLowerCase();
+
+  return [
+    {
+      name: "Wiktionary",
+      url: `https://en.wiktionary.org/wiki/${encodeURIComponent(lower)}`
+    },
+    {
+      name: "Cambridge Dictionary",
+      url: `https://dictionary.cambridge.org/dictionary/english/${encodeURIComponent(lower)}`
+    },
+    {
+      name: "Google Search",
+      url: `https://www.google.com/search?q=${encodeURIComponent(lower + " meaning")}`
+    }
+  ];
+}
+
+function normalizeMeaningResult(word, sourceName, meanings, phonetic = "", sourceUrl = "") {
+  return {
+    word,
+    phonetic,
+    sourceName,
+    sourceUrl,
+    searchLinks: buildSearchLinks(word),
+    meanings: meanings.slice(0, 5)
+  };
+}
+
+async function getFromDictionaryApiDev(word) {
+  const url = `https://api.dictionaryapi.dev/api/v2/entries/en/${word.toLowerCase()}`;
+  const response = await fetch(url);
+
+  if (!response.ok) {
+    throw new Error("dictionaryapi.dev not found");
   }
 
-  try {
-    const url = `https://api.dictionaryapi.dev/api/v2/entries/en/${word.toLowerCase()}`;
-    const response = await fetch(url);
+  const data = await response.json();
+  const entry = data[0];
 
-    if (!response.ok) {
-      throw new Error("definition not found");
-    }
+  const meanings = [];
 
-    const data = await response.json();
-    const entry = data[0];
-
-    const meanings = [];
-
-    for (const meaning of entry.meanings || []) {
-      const firstDefinition = meaning.definitions?.[0];
-
-      if (firstDefinition?.definition) {
+  for (const meaning of entry.meanings || []) {
+    for (const definitionItem of meaning.definitions || []) {
+      if (definitionItem.definition) {
         meanings.push({
           partOfSpeech: meaning.partOfSpeech || "",
-          definition: firstDefinition.definition,
-          example: firstDefinition.example || ""
+          definition: definitionItem.definition,
+          example: definitionItem.example || ""
         });
       }
 
-      if (meanings.length >= 3) {
+      if (meanings.length >= 5) {
         break;
       }
     }
 
-    const result = {
-      word: entry.word || word,
-      phonetic: entry.phonetic || "",
-      meanings
-    };
-
-    definitionCache.set(word, result);
-    return result;
-  } catch (error) {
-    console.log(`意味の取得に失敗: ${word}`);
-
-    const result = {
-      word,
-      phonetic: "",
-      meanings: []
-    };
-
-    definitionCache.set(word, result);
-    return result;
+    if (meanings.length >= 5) {
+      break;
+    }
   }
+
+  if (meanings.length === 0) {
+    throw new Error("dictionaryapi.dev no meanings");
+  }
+
+  return normalizeMeaningResult(
+    entry.word || word,
+    "DictionaryAPI.dev",
+    meanings,
+    entry.phonetic || "",
+    url
+  );
+}
+
+async function getFromFreeDictionaryApi(word) {
+  const url = `https://freedictionaryapi.com/api/v1/entries/en/${word.toLowerCase()}`;
+  const response = await fetch(url);
+
+  if (!response.ok) {
+    throw new Error("freedictionaryapi.com not found");
+  }
+
+  const data = await response.json();
+
+  const meanings = [];
+  const entries = data.entries || [];
+
+  for (const entry of entries) {
+    for (const sense of entry.senses || []) {
+      if (sense.definition) {
+        meanings.push({
+          partOfSpeech: entry.partOfSpeech || "",
+          definition: sense.definition,
+          example: sense.examples?.[0] || ""
+        });
+      }
+
+      if (meanings.length >= 5) {
+        break;
+      }
+    }
+
+    if (meanings.length >= 5) {
+      break;
+    }
+  }
+
+  if (meanings.length === 0) {
+    throw new Error("freedictionaryapi.com no meanings");
+  }
+
+  const pronunciationText =
+    entries[0]?.pronunciations?.find((p) => p.type === "ipa")?.text ||
+    entries[0]?.pronunciations?.[0]?.text ||
+    "";
+
+  return normalizeMeaningResult(
+    data.word || word,
+    "FreeDictionaryAPI.com / Wiktionary",
+    meanings,
+    pronunciationText,
+    data.source?.url || url
+  );
+}
+
+async function getFromDatamuse(word) {
+  const url = `https://api.datamuse.com/words?sp=${encodeURIComponent(word.toLowerCase())}&md=d&max=1`;
+  const response = await fetch(url);
+
+  if (!response.ok) {
+    throw new Error("datamuse not found");
+  }
+
+  const data = await response.json();
+  const item =
+    data.find((entry) => entry.word?.toLowerCase() === word.toLowerCase()) ||
+    data[0];
+
+  if (!item || !item.defs || item.defs.length === 0) {
+    throw new Error("datamuse no meanings");
+  }
+
+  const meanings = item.defs.map((def) => {
+    const parts = def.split("\t");
+    const partOfSpeech = parts[0] || "";
+    const definition = parts.slice(1).join(" ") || def;
+
+    return {
+      partOfSpeech,
+      definition,
+      example: ""
+    };
+  });
+
+  return normalizeMeaningResult(
+    item.word || word,
+    "Datamuse / Wiktionary / WordNet",
+    meanings,
+    "",
+    url
+  );
+}
+
+async function getWordMeaning(word) {
+  const upperWord = word.toUpperCase();
+
+  if (definitionCache.has(upperWord)) {
+    return definitionCache.get(upperWord);
+  }
+
+  const providers = [
+    getFromDictionaryApiDev,
+    getFromFreeDictionaryApi,
+    getFromDatamuse
+  ];
+
+  for (const provider of providers) {
+    try {
+      const result = await provider(upperWord);
+
+      if (result && result.meanings && result.meanings.length > 0) {
+        definitionCache.set(upperWord, result);
+        return result;
+      }
+    } catch (error) {
+      console.log(`意味取得失敗: ${upperWord} / ${error.message}`);
+    }
+  }
+
+  const fallbackResult = {
+    word: upperWord,
+    phonetic: "",
+    sourceName: "",
+    sourceUrl: "",
+    meanings: [],
+    searchLinks: buildSearchLinks(upperWord)
+  };
+
+  definitionCache.set(upperWord, fallbackResult);
+  return fallbackResult;
 }
 
 function getPlayer(room, socketId) {
@@ -237,7 +385,9 @@ function leaveCurrentRoom(socket) {
 
   socket.leave(currentRoomId);
 
-  socket.to(currentRoomId).emit("errorMessage", "相手が退出しました。");
+  socket.to(currentRoomId).emit("opponentLeft", {
+    message: "相手が退出しました。"
+  });
 
   if (room.players.length === 0) {
     delete rooms[currentRoomId];
