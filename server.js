@@ -128,6 +128,11 @@ io.on("connection", (socket) => {
       return;
     }
 
+    if (room.guesses[socket.id].length >= 6) {
+  socket.emit("errorMessage", "もう6回入力済みです。");
+  return;
+}
+
     const result = judgeGuess(room.answer, guess);
 
     room.guesses[socket.id].push({
