@@ -1,6 +1,7 @@
 const express = require("express");
 const http = require("http");
 const path = require("path");
+const fs = require("fs");
 const { Server } = require("socket.io");
 
 const app = express();
@@ -11,9 +12,25 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.static(path.join(__dirname, "public")));
 
-const words = ["APPLE", "GRAPE", "LEMON", "MELON", "PEACH", "BRAIN", "MOUSE"];
-
 const rooms = {};
+
+let words = [];
+let wordSet = new Set();
+
+async function loadWords() {
+  const { default: wordListPath } = await import("word-list");
+
+  const text = fs.readFileSync(wordListPath, "utf8");
+
+  words = text
+    .split(/\r?\n/)
+    .map((word) => word.trim().toUpperCase())
+    .filter((word) => /^[A-Z]{5}$/.test(word));
+
+  wordSet = new Set(words);
+
+  console.log(`5文字英単語を ${words.length} 個読み込みました。`);
+}
 
 function createRoomId() {
   return Math.random().toString(36).substring(2, 6).toUpperCase();
@@ -76,6 +93,7 @@ io.on("connection", (socket) => {
     });
 
     console.log(`部屋作成: ${roomId}`);
+    console.log(`答え: ${rooms[roomId].answer}`);
   });
 
   socket.on("joinRoom", ({ roomId }) => {
@@ -128,10 +146,15 @@ io.on("connection", (socket) => {
       return;
     }
 
+    if (!wordSet.has(guess)) {
+      socket.emit("errorMessage", "辞書にない英単語です。");
+      return;
+    }
+
     if (room.guesses[socket.id].length >= 6) {
-  socket.emit("errorMessage", "もう6回入力済みです。");
-  return;
-}
+      socket.emit("errorMessage", "もう6回入力済みです。");
+      return;
+    }
 
     const result = judgeGuess(room.answer, guess);
 
@@ -180,6 +203,8 @@ io.on("connection", (socket) => {
   });
 });
 
-server.listen(PORT, () => {
-  console.log(`サーバー起動: http://localhost:${PORT}`);
+loadWords().then(() => {
+  server.listen(PORT, () => {
+    console.log(`サーバー起動: http://localhost:${PORT}`);
+  });
 });
