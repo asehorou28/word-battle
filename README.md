@@ -2,6 +2,12 @@
 
 オンラインで2人対戦できる、Wordle風の5文字英単語推理ゲームです。
 
+## 公開URL
+
+以下のURLから遊べます。
+
+https://word-battle-t4de.onrender.com
+
 ## 機能
 
 - 部屋IDによる2人対戦
