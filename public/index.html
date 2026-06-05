@@ -368,7 +368,7 @@
           残り候補数：<span id="opponentCandidateCount">-</span> 語
         </div>
         <div id="opponentBoard"></div>
-        <div class="small">相手の文字は見えません。色と候補数だけ表示されます。</div>
+        <div class="small">試合中は相手の文字は見えません。終了後に公開されます。</div>
       </div>
     </div>
 
@@ -586,6 +586,31 @@
       }
     }
 
+    function revealBoards(boards) {
+      if (!boards || !Array.isArray(boards)) {
+        return;
+      }
+
+      const myBoardData = boards.find((board) => board.id === socket.id);
+      const opponentBoardData = boards.find((board) => board.id !== socket.id);
+
+      if (myBoardData) {
+        createEmptyRows(myBoard);
+
+        myBoardData.guesses.forEach((item, index) => {
+          setGuessRow(myBoard, index, item.guess, item.result, true);
+        });
+      }
+
+      if (opponentBoardData) {
+        createEmptyRows(opponentBoard);
+
+        opponentBoardData.guesses.forEach((item, index) => {
+          setGuessRow(opponentBoard, index, item.guess, item.result, true);
+        });
+      }
+    }
+
     function resetKeyboard() {
       for (const letter of "ABCDEFGHIJKLMNOPQRSTUVWXYZ") {
         keyboardState[letter] = "unknown";
@@ -798,7 +823,7 @@
       message.textContent = `${playerName} は6回使い切りました。`;
     });
 
-    socket.on("gameOver", ({ winnerId, answer, definition }) => {
+    socket.on("gameOver", ({ winnerId, answer, definition, boards }) => {
       gameStarted = false;
 
       guessInput.disabled = true;
@@ -815,6 +840,7 @@
         message.textContent = `相手の勝ちです。答えは ${answer} でした。`;
       }
 
+      revealBoards(boards);
       showMeaning(answer, definition);
     });
 

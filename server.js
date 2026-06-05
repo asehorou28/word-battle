@@ -354,6 +354,17 @@ function getPublicPlayers(room) {
   }));
 }
 
+function getRevealedBoards(room) {
+  return room.players.map((player) => ({
+    id: player.id,
+    name: player.name,
+    guesses: (room.guesses[player.id] || []).map((item) => ({
+      guess: item.guess,
+      result: item.result
+    }))
+  }));
+}
+
 function resetRoomForRematch(room) {
   room.answer = chooseAnswer();
   room.status = "playing";
@@ -385,7 +396,8 @@ async function finishGame(roomId, winnerId) {
   io.to(roomId).emit("gameOver", {
     winnerId,
     answer: room.answer,
-    definition: room.definition
+    definition: room.definition,
+    boards: getRevealedBoards(room)
   });
 }
 
