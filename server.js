@@ -89,6 +89,52 @@ function judgeGuess(answer, guess) {
   return result;
 }
 
+function sameResult(resultA, resultB) {
+  if (!Array.isArray(resultA) || !Array.isArray(resultB)) {
+    return false;
+  }
+
+  if (resultA.length !== resultB.length) {
+    return false;
+  }
+
+  for (let i = 0; i < resultA.length; i++) {
+    if (resultA[i] !== resultB[i]) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function isPossibleCandidate(candidate, history) {
+  for (const item of history) {
+    const simulatedResult = judgeGuess(candidate, item.guess);
+
+    if (!sameResult(simulatedResult, item.result)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function countRemainingCandidates(history) {
+  if (!history || history.length === 0) {
+    return answerWords.length;
+  }
+
+  let count = 0;
+
+  for (const candidate of answerWords) {
+    if (isPossibleCandidate(candidate, history)) {
+      count++;
+    }
+  }
+
+  return count;
+}
+
 function buildSearchLinks(word) {
   const lower = word.toLowerCase();
 
@@ -439,7 +485,8 @@ io.on("connection", (socket) => {
     socket.emit("roomCreated", {
       roomId,
       playerName: name,
-      players: getPublicPlayers(rooms[roomId])
+      players: getPublicPlayers(rooms[roomId]),
+      initialCandidateCount: answerWords.length
     });
 
     console.log(`部屋作成: ${roomId}`);
@@ -492,6 +539,7 @@ io.on("connection", (socket) => {
     io.to(roomId).emit("gameStart", {
       roomId,
       players: getPublicPlayers(room),
+      initialCandidateCount: answerWords.length,
       message: "2人そろいました。ゲーム開始です。"
     });
 
@@ -556,16 +604,20 @@ io.on("connection", (socket) => {
 
     player.attempts = room.guesses[socket.id].length;
 
+    const remainingCandidateCount = countRemainingCandidates(room.guesses[socket.id]);
+
     socket.emit("guessResult", {
       guess,
       result,
-      guessCount: player.attempts
+      guessCount: player.attempts,
+      remainingCandidateCount
     });
 
     socket.to(roomId).emit("opponentGuess", {
       result,
       guessCount: player.attempts,
-      playerName: player.name
+      playerName: player.name,
+      remainingCandidateCount
     });
 
     if (guess === room.answer) {
@@ -632,6 +684,7 @@ io.on("connection", (socket) => {
       io.to(roomId).emit("rematchStarted", {
         roomId,
         players: getPublicPlayers(room),
+        initialCandidateCount: answerWords.length,
         message: "再戦開始です。"
       });
 

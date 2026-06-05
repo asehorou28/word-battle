@@ -77,6 +77,71 @@
       font-weight: bold;
     }
 
+    .keyboard {
+      margin-top: 14px;
+      user-select: none;
+    }
+
+    .keyboardTitle {
+      color: #d1d5db;
+      font-size: 14px;
+      margin-bottom: 8px;
+    }
+
+    .keyboardRow {
+      display: flex;
+      justify-content: center;
+      gap: 6px;
+      margin-bottom: 6px;
+    }
+
+    .key {
+      min-width: 36px;
+      height: 44px;
+      padding: 0 8px;
+      border-radius: 6px;
+      border: none;
+      background: #475569;
+      color: white;
+      font-weight: bold;
+      cursor: pointer;
+      font-size: 15px;
+    }
+
+    .key:hover {
+      opacity: 0.85;
+    }
+
+    .key:disabled {
+      cursor: not-allowed;
+      opacity: 0.8;
+    }
+
+    .keyWide {
+      min-width: 62px;
+      font-size: 13px;
+    }
+
+    .keyUnknown {
+      background: #475569;
+    }
+
+    .keyGray {
+      background: #1f2937;
+      color: #6b7280;
+      border: 1px solid #374151;
+    }
+
+    .keyYellow {
+      background: #ca8a04;
+      color: white;
+    }
+
+    .keyGreen {
+      background: #16a34a;
+      color: white;
+    }
+
     .boards {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -94,6 +159,13 @@
       font-weight: bold;
       margin-bottom: 10px;
       color: #d1d5db;
+    }
+
+    .candidateCount {
+      margin-bottom: 10px;
+      color: #93c5fd;
+      font-weight: bold;
+      font-size: 15px;
     }
 
     .row {
@@ -185,6 +257,22 @@
       input {
         max-width: 150px;
       }
+
+      .keyboardRow {
+        gap: 4px;
+      }
+
+      .key {
+        min-width: 29px;
+        height: 40px;
+        padding: 0 5px;
+        font-size: 13px;
+      }
+
+      .keyWide {
+        min-width: 50px;
+        font-size: 11px;
+      }
     }
   </style>
 </head>
@@ -213,6 +301,47 @@
       <input id="guessInput" placeholder="5文字の単語" maxlength="5" disabled />
       <button id="guessButton" disabled>送信</button>
       <button id="rematchButton" style="display:none;">もう一度遊ぶ</button>
+
+      <div class="keyboard">
+        <div class="keyboardTitle">あなたのキーボード</div>
+
+        <div class="keyboardRow">
+          <button class="key" data-key="Q">Q</button>
+          <button class="key" data-key="W">W</button>
+          <button class="key" data-key="E">E</button>
+          <button class="key" data-key="R">R</button>
+          <button class="key" data-key="T">T</button>
+          <button class="key" data-key="Y">Y</button>
+          <button class="key" data-key="U">U</button>
+          <button class="key" data-key="I">I</button>
+          <button class="key" data-key="O">O</button>
+          <button class="key" data-key="P">P</button>
+        </div>
+
+        <div class="keyboardRow">
+          <button class="key" data-key="A">A</button>
+          <button class="key" data-key="S">S</button>
+          <button class="key" data-key="D">D</button>
+          <button class="key" data-key="F">F</button>
+          <button class="key" data-key="G">G</button>
+          <button class="key" data-key="H">H</button>
+          <button class="key" data-key="J">J</button>
+          <button class="key" data-key="K">K</button>
+          <button class="key" data-key="L">L</button>
+        </div>
+
+        <div class="keyboardRow">
+          <button class="key keyWide" data-action="ENTER">ENTER</button>
+          <button class="key" data-key="Z">Z</button>
+          <button class="key" data-key="X">X</button>
+          <button class="key" data-key="C">C</button>
+          <button class="key" data-key="V">V</button>
+          <button class="key" data-key="B">B</button>
+          <button class="key" data-key="N">N</button>
+          <button class="key" data-key="M">M</button>
+          <button class="key keyWide" data-action="DEL">DEL</button>
+        </div>
+      </div>
     </div>
 
     <div id="message">名前を入力して、部屋を作るか部屋IDを入力してください。</div>
@@ -227,13 +356,19 @@
     <div class="boards">
       <div class="boardBox">
         <div class="boardTitle">あなたの盤面</div>
+        <div class="candidateCount">
+          残り候補数：<span id="myCandidateCount">-</span> 語
+        </div>
         <div id="myBoard"></div>
       </div>
 
       <div class="boardBox">
         <div class="boardTitle">相手の盤面</div>
+        <div class="candidateCount">
+          残り候補数：<span id="opponentCandidateCount">-</span> 語
+        </div>
         <div id="opponentBoard"></div>
-        <div class="small">相手の文字は見えません。色だけ表示されます。</div>
+        <div class="small">相手の文字は見えません。色と候補数だけ表示されます。</div>
       </div>
     </div>
 
@@ -251,6 +386,15 @@
     let currentRoomId = null;
     let gameStarted = false;
 
+    const keyboardState = {};
+
+    const statePriority = {
+      unknown: 0,
+      gray: 1,
+      yellow: 2,
+      green: 3
+    };
+
     const nameInput = document.getElementById("nameInput");
     const createRoomButton = document.getElementById("createRoomButton");
     const joinRoomButton = document.getElementById("joinRoomButton");
@@ -265,11 +409,14 @@
     const opponentNameDisplay = document.getElementById("opponentNameDisplay");
     const myBoard = document.getElementById("myBoard");
     const opponentBoard = document.getElementById("opponentBoard");
+    const myCandidateCount = document.getElementById("myCandidateCount");
+    const opponentCandidateCount = document.getElementById("opponentCandidateCount");
     const meaningBox = document.getElementById("meaningBox");
     const meaningContent = document.getElementById("meaningContent");
 
     createEmptyRows(myBoard);
     createEmptyRows(opponentBoard);
+    resetKeyboard();
 
     createRoomButton.addEventListener("click", () => {
       message.textContent = "部屋を作成中です。";
@@ -304,11 +451,44 @@
     });
 
     guessInput.addEventListener("input", () => {
-      guessInput.value = guessInput.value.toUpperCase();
+      guessInput.value = guessInput.value.toUpperCase().replace(/[^A-Z]/g, "");
     });
 
     roomInput.addEventListener("input", () => {
       roomInput.value = roomInput.value.toUpperCase();
+    });
+
+    document.querySelectorAll(".key").forEach((keyButton) => {
+      keyButton.addEventListener("click", () => {
+        const letter = keyButton.dataset.key;
+        const action = keyButton.dataset.action;
+
+        if (action === "ENTER") {
+          submitGuess();
+          return;
+        }
+
+        if (action === "DEL") {
+          guessInput.value = guessInput.value.slice(0, -1);
+          guessInput.focus();
+          return;
+        }
+
+        if (!letter) {
+          return;
+        }
+
+        if (guessInput.disabled) {
+          return;
+        }
+
+        if (guessInput.value.length >= 5) {
+          return;
+        }
+
+        guessInput.value += letter;
+        guessInput.focus();
+      });
     });
 
     copyRoomButton.addEventListener("click", async () => {
@@ -406,9 +586,51 @@
       }
     }
 
-    function resetScreenForGame() {
+    function resetKeyboard() {
+      for (const letter of "ABCDEFGHIJKLMNOPQRSTUVWXYZ") {
+        keyboardState[letter] = "unknown";
+      }
+
+      renderKeyboard();
+    }
+
+    function updateKeyboard(guess, result) {
+      for (let i = 0; i < guess.length; i++) {
+        const letter = guess[i];
+        const newState = result[i];
+        const currentState = keyboardState[letter] || "unknown";
+
+        if (statePriority[newState] > statePriority[currentState]) {
+          keyboardState[letter] = newState;
+        }
+      }
+
+      renderKeyboard();
+    }
+
+    function renderKeyboard() {
+      document.querySelectorAll("[data-key]").forEach((keyButton) => {
+        const letter = keyButton.dataset.key;
+        const state = keyboardState[letter] || "unknown";
+
+        keyButton.classList.remove("keyUnknown", "keyGray", "keyYellow", "keyGreen");
+
+        if (state === "green") {
+          keyButton.classList.add("keyGreen");
+        } else if (state === "yellow") {
+          keyButton.classList.add("keyYellow");
+        } else if (state === "gray") {
+          keyButton.classList.add("keyGray");
+        } else {
+          keyButton.classList.add("keyUnknown");
+        }
+      });
+    }
+
+    function resetScreenForGame(initialCandidateCount) {
       createEmptyRows(myBoard);
       createEmptyRows(opponentBoard);
+      resetKeyboard();
 
       meaningBox.style.display = "none";
       meaningContent.innerHTML = "";
@@ -419,6 +641,9 @@
 
       rematchButton.style.display = "none";
       rematchButton.disabled = false;
+
+      myCandidateCount.textContent = initialCandidateCount ?? "-";
+      opponentCandidateCount.textContent = initialCandidateCount ?? "-";
 
       gameStarted = true;
       lockRoomControls();
@@ -507,13 +732,16 @@
       meaningContent.innerHTML = html;
     }
 
-    socket.on("roomCreated", ({ roomId, playerName, players }) => {
+    socket.on("roomCreated", ({ roomId, playerName, players, initialCandidateCount }) => {
       currentRoomId = roomId;
 
       roomDisplay.textContent = roomId;
       roomInput.value = roomId;
       myNameDisplay.textContent = playerName;
       opponentNameDisplay.textContent = "待機中";
+
+      myCandidateCount.textContent = initialCandidateCount ?? "-";
+      opponentCandidateCount.textContent = "-";
 
       copyRoomButton.disabled = false;
       lockRoomControls();
@@ -525,7 +753,7 @@
       message.textContent = `部屋を作りました。相手に部屋ID「${roomId}」を教えてください。`;
     });
 
-    socket.on("gameStart", ({ roomId, players, message: startMessage }) => {
+    socket.on("gameStart", ({ roomId, players, initialCandidateCount, message: startMessage }) => {
       currentRoomId = roomId;
 
       roomDisplay.textContent = roomId;
@@ -533,19 +761,30 @@
       copyRoomButton.disabled = false;
 
       updatePlayerNames(players);
-      resetScreenForGame();
+      resetScreenForGame(initialCandidateCount);
 
       message.textContent = startMessage;
     });
 
-    socket.on("guessResult", ({ guess, result, guessCount }) => {
+    socket.on("guessResult", ({ guess, result, guessCount, remainingCandidateCount }) => {
       setGuessRow(myBoard, guessCount - 1, guess, result, true);
+      updateKeyboard(guess, result);
+
+      if (typeof remainingCandidateCount === "number") {
+        myCandidateCount.textContent = remainingCandidateCount;
+      }
+
       guessInput.value = "";
       message.textContent = "判定しました。";
     });
 
-    socket.on("opponentGuess", ({ result, guessCount, playerName }) => {
+    socket.on("opponentGuess", ({ result, guessCount, playerName, remainingCandidateCount }) => {
       setGuessRow(opponentBoard, guessCount - 1, "?????", result, false);
+
+      if (typeof remainingCandidateCount === "number") {
+        opponentCandidateCount.textContent = remainingCandidateCount;
+      }
+
       message.textContent = `${playerName} が ${guessCount} 回目を入力しました。`;
     });
 
@@ -583,14 +822,14 @@
       message.textContent = `再戦希望：${count}/2`;
     });
 
-    socket.on("rematchStarted", ({ roomId, players, message: startMessage }) => {
+    socket.on("rematchStarted", ({ roomId, players, initialCandidateCount, message: startMessage }) => {
       currentRoomId = roomId;
 
       roomDisplay.textContent = roomId;
       roomInput.value = roomId;
 
       updatePlayerNames(players);
-      resetScreenForGame();
+      resetScreenForGame(initialCandidateCount);
 
       message.textContent = startMessage;
     });
